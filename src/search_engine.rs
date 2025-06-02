@@ -52,7 +52,6 @@ impl InvertedIndeciesHash {
 
     pub fn query(&self, words: Vec<&str>) -> Vec<String> {
         let mut result = Vec::new();
-
         let mut b = Vec::new();
 
         if let Some(first_word) = words.first() {

@@ -1,8 +1,13 @@
-use algorithmik3::search_engine::InvertedIndeciesHash;
+use std::collections::{BTreeMap, HashMap};
+
+use algorithmik3::search_engine::InvertedIndecies;
+
+type IndexHashMap = HashMap<String, Vec<usize>>;
+type IndexBTreeMap = BTreeMap<String, Vec<usize>>;
 
 fn main() {
     let timeout = std::time::Instant::now();
-    let indecies = InvertedIndeciesHash::new("movies.txt");
+    let indecies: InvertedIndecies<IndexHashMap> = InvertedIndecies::new("movies.txt");
     let elapsed = timeout.elapsed();
     println!("Indexing took: {:?}", elapsed);
 
@@ -20,8 +25,15 @@ fn main() {
     let elapsed = timeout.elapsed();
     println!("Querying took: {:?} for {} movies", elapsed, result.len());
 
-    println!("Results:");
-    for movie in result {
-        println!("{}", movie);
-    }
+    let timeout = std::time::Instant::now();
+    let indecies: InvertedIndecies<IndexBTreeMap> = InvertedIndecies::new("movies.txt");
+    let elapsed = timeout.elapsed();
+    println!("Indexing took: {:?}", elapsed);
+
+    let query_words: Vec<&str> = args[1..].iter().map(|s| s.as_str()).collect();
+
+    let timeout = std::time::Instant::now();
+    let result = indecies.query(query_words);
+    let elapsed = timeout.elapsed();
+    println!("Querying took: {:?} for {} movies", elapsed, result.len());
 }

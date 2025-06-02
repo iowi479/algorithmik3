@@ -1,8 +1,60 @@
 use crate::intersection::galloping_search;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
-pub struct InvertedIndeciesHash {
-    pub indecies: HashMap<String, Vec<usize>>,
+pub trait MapTrait<K, V> {
+    fn new() -> Self;
+    fn get(&self, key: &K) -> Option<&V>;
+    fn get_mut(&mut self, key: &K) -> Option<&mut V>;
+    fn insert(&mut self, key: K, value: V);
+}
+
+impl<K, V> MapTrait<K, V> for HashMap<K, V>
+where
+    K: std::hash::Hash + Eq,
+{
+    fn new() -> Self {
+        HashMap::new()
+    }
+
+    fn get(&self, key: &K) -> Option<&V> {
+        HashMap::get(self, key)
+    }
+
+    fn get_mut(&mut self, key: &K) -> Option<&mut V> {
+        HashMap::get_mut(self, key)
+    }
+
+    fn insert(&mut self, key: K, value: V) {
+        HashMap::insert(self, key, value);
+    }
+}
+
+impl<K, V> MapTrait<K, V> for BTreeMap<K, V>
+where
+    K: Ord,
+{
+    fn new() -> Self {
+        BTreeMap::new()
+    }
+
+    fn get(&self, key: &K) -> Option<&V> {
+        BTreeMap::get(self, key)
+    }
+
+    fn get_mut(&mut self, key: &K) -> Option<&mut V> {
+        BTreeMap::get_mut(self, key)
+    }
+
+    fn insert(&mut self, key: K, value: V) {
+        BTreeMap::insert(self, key, value);
+    }
+}
+
+pub struct InvertedIndecies<M>
+where
+    M: MapTrait<String, Vec<usize>>,
+{
+    pub indecies: M,
     pub movies: Vec<String>,
 }
 
@@ -11,9 +63,12 @@ fn prepare_word(word: &str) -> String {
         .replace(|c: char| !c.is_alphanumeric(), "")
 }
 
-impl InvertedIndeciesHash {
+impl<M> InvertedIndecies<M>
+where
+    M: MapTrait<String, Vec<usize>>,
+{
     pub fn new(file_path: &str) -> Self {
-        let mut indecies = HashMap::new();
+        let mut indecies = M::new();
         let mut movies = Vec::new();
 
         let mut buffer = String::with_capacity(8 * 1024);
@@ -35,9 +90,15 @@ impl InvertedIndeciesHash {
                 for word in words {
                     let word = prepare_word(word);
                     if !word.is_empty() {
-                        let i = indecies.entry(word).or_insert_with(Vec::new);
-                        if i.is_empty() || *i.last().unwrap() != movies.len() {
-                            i.push(movies.len());
+                        match indecies.get_mut(&word) {
+                            None => {
+                                indecies.insert(word.clone(), vec![movies.len()]);
+                            }
+                            Some(indices) => {
+                                if indices.is_empty() || *indices.last().unwrap() != movies.len() {
+                                    indices.push(movies.len());
+                                }
+                            }
                         }
                     }
                 }

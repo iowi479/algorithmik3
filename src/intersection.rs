@@ -45,15 +45,15 @@ use std::fmt::Display;
 
 pub fn galloping_search<T>(a: &[T], b: &[T]) -> Vec<T>
 where
-    T: Ord + Copy + Display,
+    T: Ord + Clone + Display,
 {
     let mut result = Vec::new();
 
     let mut pointer_a = 0;
-    for &item in b {
+    for item in b {
         // Galloping search
         let mut step = 1;
-        while pointer_a + step < a.len() && a[pointer_a + step] < item {
+        while pointer_a + step < a.len() && a[pointer_a + step] < *item {
             step *= 2;
         }
         let start = pointer_a + step / 2;
@@ -61,7 +61,7 @@ where
 
         match a[start..end].binary_search(&item) {
             Ok(_) => {
-                result.push(item);
+                result.push(item.clone());
                 pointer_a = start; // Move pointer_a to the end of the found range
             }
             Err(_) => {

@@ -37,14 +37,17 @@ fn main() {
         let time = std::time::Instant::now();
         let result_naive = intersection::naive(&a, &b);
         let duration_naive = time.elapsed();
+        assert_eq!(i, result_naive.len());
 
         let time = std::time::Instant::now();
         let result_binary = intersection::binary_search(&a, &b);
         let duration_binary = time.elapsed();
+        assert_eq!(i, result_binary.len());
 
         let time = std::time::Instant::now();
         let result_galloping = intersection::galloping_search(&a, &b);
         let duration_galloping = time.elapsed();
+        assert_eq!(i, result_galloping.len());
 
         let width = n.to_string().len();
         let time_width = 6;

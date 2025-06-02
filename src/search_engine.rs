@@ -139,3 +139,55 @@ where
             .collect::<Vec<String>>()
     }
 }
+
+pub struct NaiveSearchEngine {
+    movies: Vec<(String, String)>,
+}
+
+impl NaiveSearchEngine {
+    pub fn new(file_path: &str) -> Self {
+        let mut movies = Vec::new();
+        let mut buffer = String::with_capacity(8 * 1024);
+
+        if let Ok(file) = std::fs::File::open(file_path) {
+            use std::io::{BufRead, BufReader};
+            let mut reader = BufReader::new(file);
+
+            while let Ok(bytes_read) = reader.read_line(&mut buffer) {
+                if bytes_read == 0 {
+                    break; // EOF
+                }
+                let title_end = buffer.find('\t').unwrap();
+                let title = buffer[..title_end].to_string();
+
+                let description = buffer[..].trim().to_string();
+
+                movies.push((title, description));
+                buffer.clear();
+            }
+        }
+
+        Self { movies }
+    }
+
+    pub fn query(&self, words: Vec<&str>) -> Vec<String> {
+        let mut result = Vec::new();
+
+        'movie: for (title, description) in &self.movies {
+            'query_word: for query_word in &words {
+                let query_word = prepare_word(query_word);
+                for word in description.split_whitespace() {
+                    if prepare_word(word) == query_word {
+                        continue 'query_word;
+                    }
+                }
+
+                continue 'movie;
+            }
+
+            result.push(title.clone());
+        }
+
+        result
+    }
+}

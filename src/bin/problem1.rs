@@ -1,5 +1,7 @@
 use algorithmik3::intersection;
 
+type T = u64;
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
@@ -11,16 +13,18 @@ fn main() {
 
     let mut a = Vec::with_capacity(n);
     for i in 0..n {
-        a.push(i as u64);
+        a.push(i as T);
     }
 
     let log2 = (n as f64).log2() as usize;
     for i in 0..=log2 {
         let mut b;
+        let amount;
         if i == 0 {
             // For the first iteration, we use the entire range
             b = Vec::with_capacity(i);
-            b.extend(0..n as u64);
+            b.extend(0..n as T);
+            amount = n;
         } else {
             // For subsequent iterations, we reduce the size of b
             let div = n / (2_usize.pow(i as u32));
@@ -28,26 +32,27 @@ fn main() {
             let mut rng = rand::rng();
             b = rand::seq::index::sample(&mut rng, n, div)
                 .into_iter()
-                .map(|x| x as u64)
+                .map(|x| x as T)
                 .collect();
 
             b.sort_unstable();
+            amount = div;
         }
 
         let time = std::time::Instant::now();
         let result_naive = intersection::naive(&a, &b);
         let duration_naive = time.elapsed();
-        assert_eq!(i, result_naive.len());
+        assert_eq!(amount, result_naive.len());
 
         let time = std::time::Instant::now();
         let result_binary = intersection::binary_search(&a, &b);
         let duration_binary = time.elapsed();
-        assert_eq!(i, result_binary.len());
+        assert_eq!(amount, result_binary.len());
 
         let time = std::time::Instant::now();
         let result_galloping = intersection::galloping_search(&a, &b);
         let duration_galloping = time.elapsed();
-        assert_eq!(i, result_galloping.len());
+        assert_eq!(amount, result_galloping.len());
 
         let width = n.to_string().len();
         let time_width = 6;

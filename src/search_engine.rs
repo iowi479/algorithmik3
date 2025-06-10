@@ -1,4 +1,3 @@
-use crate::intersection::galloping_search;
 use std::collections::{BTreeMap, HashMap};
 
 pub trait MapTrait<K, V> {
@@ -52,7 +51,7 @@ where
 
 pub struct InvertedIndecies<M>
 where
-    M: MapTrait<String, Vec<usize>>,
+    M: MapTrait<String, Vec<MovieIndex>>,
 {
     pub indecies: M,
     pub movies: Vec<String>,
@@ -65,10 +64,10 @@ fn prepare_word(word: &str) -> String {
 
 impl<M> InvertedIndecies<M>
 where
-    M: MapTrait<String, Vec<usize>>,
+    M: MapTrait<String, Vec<MovieIndex>>,
 {
     pub fn new(file_path: &str) -> Self {
-        let mut indecies = M::new();
+        let mut indices = M::new();
         let mut movies = Vec::new();
 
         let mut buffer = String::with_capacity(8 * 1024);
@@ -85,18 +84,46 @@ where
                 let title_end = buffer.find('\t').unwrap();
                 let title = buffer[..title_end].to_string();
 
-                let words = buffer.split_whitespace();
-
-                for word in words {
+                for word in title.split_whitespace() {
                     let word = prepare_word(word);
                     if !word.is_empty() {
-                        match indecies.get_mut(&word) {
+                        let mut index = MovieIndex::new(movies.len());
+                        index.seen_in_title();
+
+                        match indices.get_mut(&word) {
                             None => {
-                                indecies.insert(word.clone(), vec![movies.len()]);
+                                indices.insert(word.clone(), vec![index]);
                             }
-                            Some(indices) => {
-                                if indices.is_empty() || *indices.last().unwrap() != movies.len() {
-                                    indices.push(movies.len());
+                            Some(movie_indices) => {
+                                if movie_indices.is_empty()
+                                    || movie_indices.last().unwrap().movie_index != movies.len()
+                                {
+                                    movie_indices.push(index);
+                                } else {
+                                    movie_indices.last_mut().unwrap().seen_in_title();
+                                }
+                            }
+                        }
+                    }
+                }
+
+                for word in buffer[title_end..].split_whitespace() {
+                    let word = prepare_word(word);
+                    if !word.is_empty() {
+                        let mut index = MovieIndex::new(movies.len());
+                        index.seen_in_description();
+
+                        match indices.get_mut(&word) {
+                            None => {
+                                indices.insert(word.clone(), vec![index]);
+                            }
+                            Some(movie_indices) => {
+                                if movie_indices.is_empty()
+                                    || movie_indices.last().unwrap().movie_index != movies.len()
+                                {
+                                    movie_indices.push(index);
+                                } else {
+                                    movie_indices.last_mut().unwrap().seen_in_description();
                                 }
                             }
                         }
@@ -108,7 +135,10 @@ where
             }
         }
 
-        Self { indecies, movies }
+        Self {
+            indecies: indices,
+            movies,
+        }
     }
 
     pub fn query(&self, words: Vec<&str>) -> Vec<String> {
@@ -130,12 +160,15 @@ where
                 b.extend_from_slice(indices);
             }
 
-            result = galloping_search(&mut b, &mut result);
+            result = galloping_search_movie(&mut b, &mut result);
         }
+
+        result.sort_unstable_by_key(|movie_index| movie_index.rank());
 
         result
             .iter()
-            .map(|&i| self.movies[i].clone())
+            .rev()
+            .map(|i| self.movies[i.movie_index].clone() + i.to_string().as_str())
             .collect::<Vec<String>>()
     }
 }
@@ -190,4 +223,105 @@ impl NaiveSearchEngine {
 
         result
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct MovieIndex {
+    pub movie_index: usize,
+    pub rank_title: u8,
+    pub rank_desc: u8,
+}
+
+impl MovieIndex {
+    pub fn new(movie_index: usize) -> Self {
+        Self {
+            movie_index,
+            rank_title: 0,
+            rank_desc: 0,
+        }
+    }
+
+    pub fn seen_in_description(&mut self) {
+        if self.rank_desc < 255 {
+            self.rank_desc += 1;
+        }
+    }
+
+    pub fn seen_in_title(&mut self) {
+        if self.rank_title < 255 {
+            self.rank_title += 1;
+        }
+    }
+
+    pub fn rank(&self) -> u8 {
+        self.rank_desc.saturating_add(self.rank_title * 10)
+    }
+
+    pub fn combine(a: &MovieIndex, b: &MovieIndex) -> Self {
+        let mut combined = a.clone();
+        assert_eq!(combined.movie_index, b.movie_index);
+        combined.rank_title = combined.rank_title.saturating_add(b.rank_title);
+        combined.rank_desc = combined.rank_desc.saturating_add(b.rank_desc);
+        combined
+    }
+}
+
+impl std::fmt::Display for MovieIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "\t\t{{ movie_index: {}, rank_title: {}, rank_desc: {} }}",
+            self.movie_index, self.rank_title, self.rank_desc
+        )
+    }
+}
+
+impl Eq for MovieIndex {}
+
+impl PartialEq for MovieIndex {
+    fn eq(&self, other: &Self) -> bool {
+        self.movie_index == other.movie_index
+    }
+}
+
+impl Ord for MovieIndex {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.movie_index.cmp(&other.movie_index)
+    }
+}
+
+impl PartialOrd for MovieIndex {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+pub fn galloping_search_movie(a: &[MovieIndex], b: &[MovieIndex]) -> Vec<MovieIndex> {
+    let mut result = Vec::new();
+
+    let mut pointer_a = 0;
+    for item in b {
+        // Galloping search
+        let mut step = 1;
+        while pointer_a + step < a.len() && a[pointer_a + step] < *item {
+            step *= 2;
+        }
+        let start = pointer_a + step / 2;
+        let end = std::cmp::min(pointer_a + step + 1, a.len());
+
+        match a[start..end].binary_search(&item) {
+            Ok(ai) => {
+                let other = &a[start + ai];
+                let index = MovieIndex::combine(item, other);
+                result.push(index);
+                pointer_a = start; // Move pointer_a to the end of the found range
+            }
+            Err(_) => {
+                // If not found, continue searching in the next segment
+                pointer_a = start;
+            }
+        }
+    }
+
+    result
 }
